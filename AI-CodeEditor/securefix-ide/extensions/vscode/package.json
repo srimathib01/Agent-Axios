@@ -1,0 +1,170 @@
+{
+  "name": "securefix-ide",
+  "displayName": "SecureFix AI IDE",
+  "description": "AI-Powered Security Vulnerability Detection and Fix Generation",
+  "version": "0.1.0",
+  "publisher": "securefix",
+  "engines": {
+    "vscode": "^1.76.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "security",
+    "vulnerability",
+    "ai",
+    "fix",
+    "code analysis"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "securefix-container",
+          "title": "SecureFix AI",
+          "icon": "resources/securefix-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "securefix-container": [
+        {
+          "type": "webview",
+          "id": "securefix.mainPanel",
+          "name": "SecureFix"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "securefix.cloneRepository",
+        "title": "SecureFix: Clone Repository"
+      },
+      {
+        "command": "securefix.scanWorkspace",
+        "title": "SecureFix: Scan Workspace for Vulnerabilities"
+      },
+      {
+        "command": "securefix.fixVulnerability",
+        "title": "SecureFix: Fix Selected Vulnerability"
+      },
+      {
+        "command": "securefix.showPanel",
+        "title": "SecureFix: Show Panel"
+      },
+      {
+        "command": "securefix.acceptFix",
+        "title": "SecureFix: Accept Fix"
+      },
+      {
+        "command": "securefix.rejectFix",
+        "title": "SecureFix: Reject Fix"
+      },
+      {
+        "command": "securefix.nextDiffZone",
+        "title": "SecureFix: Go to Next Fix"
+      },
+      {
+        "command": "securefix.previousDiffZone",
+        "title": "SecureFix: Go to Previous Fix"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "securefix.scanWorkspace",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s"
+      },
+      {
+        "command": "securefix.fixVulnerability",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f"
+      },
+      {
+        "command": "securefix.nextDiffZone",
+        "key": "ctrl+shift+y",
+        "mac": "cmd+shift+y"
+      },
+      {
+        "command": "securefix.previousDiffZone",
+        "key": "ctrl+shift+u",
+        "mac": "cmd+shift+u"
+      },
+      {
+        "command": "securefix.acceptFix",
+        "key": "enter",
+        "when": "securefix.inDiffZone"
+      },
+      {
+        "command": "securefix.rejectFix",
+        "key": "escape",
+        "when": "securefix.inDiffZone"
+      }
+    ],
+    "configuration": {
+      "title": "SecureFix AI IDE",
+      "properties": {
+        "securefix.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "URL of the SecureFix backend server"
+        },
+        "securefix.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for SecureFix backend (optional)"
+        },
+        "securefix.autoScan": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan workspace when opened"
+        },
+        "securefix.showInlineDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline vulnerability decorations in editor"
+        },
+        "securefix.severity.filter": {
+          "type": "array",
+          "default": ["critical", "high", "medium", "low"],
+          "items": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low", "info"]
+          },
+          "description": "Filter vulnerabilities by severity"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "securefix.fixVulnerability",
+          "when": "editorTextFocus",
+          "group": "securefix"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node ../../node_modules/esbuild/bin/esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "node ../../node_modules/esbuild/bin/esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.76.0",
+    "esbuild": "^0.19.10",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@securefix/core": "file:../../core"
+  }
+}

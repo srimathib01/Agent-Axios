@@ -1,0 +1,13 @@
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: sqlalchemy in c:\users\hp\appdata\roaming\python\python313\site-packages (2.0.23)
+Collecting sqlalchemy
+  Using cached sqlalchemy-2.0.46-cp313-cp313-win_amd64.whl.metadata (9.8 kB)
+Requirement already satisfied: greenlet>=1 in c:\users\hp\appdata\roaming\python\python313\site-packages (from sqlalchemy) (3.1.1)
+Requirement already satisfied: typing-extensions>=4.6.0 in c:\users\hp\appdata\roaming\python\python313\site-packages (from sqlalchemy) (4.12.2)
+Using cached sqlalchemy-2.0.46-cp313-cp313-win_amd64.whl (2.1 MB)
+Installing collected packages: sqlalchemy
+  Attempting uninstall: sqlalchemy
+    Found existing installation: SQLAlchemy 2.0.23
+    Uninstalling SQLAlchemy-2.0.23:
+      Successfully uninstalled SQLAlchemy-2.0.23
+Successfully installed sqlalchemy-2.0.46

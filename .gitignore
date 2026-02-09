@@ -1,0 +1,108 @@
+# Environment variables
+.env
+.env.*
+.env.local
+.env.*.local
+.env.production
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+**/venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Node / JavaScript
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.eslintcache
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+out/
+release/
+*.local
+
+# IDEs
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.sw?
+*~
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+lerna-debug.log*
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+prisma/*.db
+prisma/*.db-journal
+
+# Data directories
+Agent-Axios/agent-axios-node-backend/data/
+Agent-Axios/agent-axios-backend/data/
+data/cache/
+data/faiss_indexes/
+data/reports/
+!data/.gitkeep
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+node_modules/
+target/
+dist/
+build/
+*.log

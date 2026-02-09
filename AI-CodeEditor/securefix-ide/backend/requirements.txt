@@ -1,0 +1,40 @@
+# SecureFix AI Fix Engine - Backend Requirements
+# Python 3.10+ (Python 3.13 requires SQLAlchemy >= 2.0.36)
+
+# Core dependencies (install certifi first)
+certifi
+
+# Web Framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# WebSocket Support
+websockets
+
+# Database (SQLAlchemy 2.0.36+ required for Python 3.13 compatibility)
+sqlalchemy>=2.0.36
+aiosqlite
+alembic
+
+# Azure OpenAI / LangChain
+langchain
+langchain-openai
+langchain-core
+openai
+
+# Configuration
+python-dotenv
+pydantic
+pydantic-settings
+
+# Async Support
+aiohttp
+httpx
+
+# Utilities
+python-json-logger
+
+# Development
+pytest
+pytest-asyncio
