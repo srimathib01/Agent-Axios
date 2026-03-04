@@ -2,7 +2,6 @@
 
 A multi-phase security analysis platform that combines autonomous AI agents with an interactive IDE for real-time vulnerability detection, code analysis, and automated fix generation.
 
----
 
 ## Table of Contents
 
@@ -18,7 +17,6 @@ A multi-phase security analysis platform that combines autonomous AI agents with
 - [Development](#development)
 - [License](#license)
 
----
 
 ## Overview
 
