@@ -64,11 +64,11 @@ class ApplyFixRequest(BaseModel):
     file_path: str
     search_block: str
     replace_block: str
-    vulnerability_id: Optional[int] = None
+    vulnerability_id: Optional[str] = None
 
 
 class RejectFixRequest(BaseModel):
-    vulnerability_id: int
+    vulnerability_id: str
     reason: str = "User rejected"
 
 
@@ -316,21 +316,27 @@ async def websocket_fix(websocket: WebSocket):
 
                     def run_generation():
                         try:
+                            vuln_dict = {
+                                'cve_id': vuln_data.get('cwe', 'UNKNOWN'),
+                                'severity': vuln_data.get('severity', 'MEDIUM'),
+                                'title': vuln_data.get('description', 'Security vulnerability'),
+                                'description': vuln_data.get('recommendation', ''),
+                                'recommendation': vuln_data.get('recommendation', '')
+                            }
+                            code_dict = {
+                                'file_path': code_ctx.get('file_path', 'unknown'),
+                                'line_start': code_ctx.get('start_line', 1),
+                                'line_end': code_ctx.get('end_line', 1),
+                                'vulnerable_code': code_ctx.get('vulnerable_code', ''),
+                                'surrounding_context': code_ctx.get('surrounding_code', ''),
+                                'imports': code_ctx.get('imports', []),
+                                'language': code_ctx.get('language', 'javascript')
+                            }
+                            logger.info(f"Fix generation input - vuln: {vuln_dict}")
+                            logger.info(f"Fix generation input - code: file={code_dict['file_path']}, lines={code_dict['line_start']}-{code_dict['line_end']}, code_len={len(code_dict['vulnerable_code'])}")
                             service.generate_fix_stream(
-                                vulnerability={
-                                    'cve_id': vuln_data.get('cwe', 'UNKNOWN'),
-                                    'severity': vuln_data.get('severity', 'MEDIUM'),
-                                    'title': vuln_data.get('description', 'Security vulnerability'),
-                                    'description': vuln_data.get('recommendation', '')
-                                },
-                                code_context={
-                                    'file_path': code_ctx.get('file_path', 'unknown'),
-                                    'line_start': code_ctx.get('start_line', 1),
-                                    'line_end': code_ctx.get('end_line', 1),
-                                    'vulnerable_code': code_ctx.get('vulnerable_code', ''),
-                                    'surrounding_context': code_ctx.get('surrounding_code', ''),
-                                    'imports': code_ctx.get('imports', [])
-                                },
+                                vulnerability=vuln_dict,
+                                code_context=code_dict,
                                 on_chunk=on_chunk,
                                 on_complete=on_complete,
                                 on_error=on_error
@@ -413,24 +419,11 @@ async def websocket_chat(websocket: WebSocket):
                     content = data.get('content', '')
                     context = data.get('context', {})
                     action = data.get('action', 'chat')
+                    # Extract vulnerability from context.vulnerability or top-level vulnerability
                     vuln = data.get('vulnerability', context.get('vulnerability', {}))
 
                     # Build prompt based on action
-                    if msg_type == 'quick_action':
-                        if action == 'explain':
-                            prompt = f"Explain this vulnerability: CWE-{vuln.get('cwe', 'unknown')}: {vuln.get('description', 'Security issue')}"
-                        elif action == 'owasp':
-                            prompt = f"What OWASP guidelines apply to CWE-{vuln.get('cwe', 'unknown')}?"
-                        elif action == 'alternative':
-                            prompt = f"Suggest alternative secure coding patterns for CWE-{vuln.get('cwe', 'unknown')}"
-                        elif action == 'test_cases':
-                            prompt = f"Generate test cases for CWE-{vuln.get('cwe', 'unknown')} vulnerability"
-                        elif action == 'impact':
-                            prompt = f"Explain the security impact of CWE-{vuln.get('cwe', 'unknown')}"
-                        else:
-                            prompt = content
-                    else:
-                        prompt = content
+                    prompt = content
 
                     # Use queue for thread-safe communication
                     message_queue = queue.Queue()
@@ -451,17 +444,23 @@ async def websocket_chat(websocket: WebSocket):
 
                     def run_chat():
                         try:
-                            # Use chat_stream for general chat (not fix generation)
+                            # Pass full vulnerability context to chat_stream
                             service.chat_stream(
                                 message=prompt,
                                 context={
                                     'vulnerability': {
                                         'cwe': vuln.get('cwe', ''),
-                                        'severity': vuln.get('severity', 'INFO'),
+                                        'cweName': vuln.get('cweName', ''),
+                                        'severity': vuln.get('severity', ''),
                                         'description': vuln.get('description', ''),
-                                        'file_path': vuln.get('file_path', context.get('current_file', ''))
+                                        'recommendation': vuln.get('recommendation', ''),
+                                        'file_path': vuln.get('file_path', context.get('currentFile', context.get('current_file', ''))),
+                                        'codeSnippet': vuln.get('codeSnippet', ''),
+                                        'owasp': vuln.get('owasp', ''),
+                                        'startLine': vuln.get('startLine', ''),
+                                        'endLine': vuln.get('endLine', ''),
                                     },
-                                    'current_file': context.get('current_file', ''),
+                                    'current_file': context.get('currentFile', context.get('current_file', '')),
                                     'recent_fix': context.get('recent_fix', '')
                                 },
                                 on_chunk=on_chunk,

@@ -34,7 +34,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
   return (
     <form
       onSubmit={handleSubmit}
-      className="p-4 border-t"
+      className="px-4 py-3 border-t"
       style={{ borderColor: 'var(--vscode-panel-border)' }}
     >
       <div className="flex gap-2 items-end">
@@ -50,18 +50,24 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend, isLoading }) => {
         />
         <button
           type="submit"
-          className="btn h-9 px-4"
+          className="btn h-9 w-9 flex items-center justify-center p-0 flex-shrink-0"
           disabled={!message.trim() || isLoading}
         >
           {isLoading ? (
-            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
-            'Send'
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M1 8L7 2M7 2L13 8M7 2V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" transform="rotate(90 8 8)"/>
+            </svg>
           )}
         </button>
       </div>
-      <div className="text-xs text-gray-500 mt-1">
-        Press Enter to send, Shift+Enter for new line
+      <div className="text-[10px] mt-1.5 flex items-center gap-1" style={{ color: 'var(--vscode-descriptionForeground)' }}>
+        <kbd className="px-1 py-0.5 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>Enter</kbd>
+        <span>send</span>
+        <span className="mx-1 opacity-30">|</span>
+        <kbd className="px-1 py-0.5 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>Shift+Enter</kbd>
+        <span>new line</span>
       </div>
     </form>
   );

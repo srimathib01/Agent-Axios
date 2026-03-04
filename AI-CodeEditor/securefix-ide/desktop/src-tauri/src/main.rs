@@ -3,8 +3,6 @@
 
 mod commands;
 
-use tauri::Manager;
-
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -34,10 +32,11 @@ fn main() {
             commands::list_cached_repositories,
             commands::open_agent_axios_repository,
         ])
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(debug_assertions)]
             {
-                let window = app.get_webview_window("main").unwrap();
+                use tauri::Manager;
+                let window = _app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
             Ok(())

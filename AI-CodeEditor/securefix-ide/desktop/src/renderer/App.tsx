@@ -27,11 +27,13 @@ import WorkspaceLoader from './components/WorkspaceLoader';
 import FileExplorer from './components/FileExplorer';
 import VulnerabilityPanel from '../../../gui/src/components/VulnerabilityPanel/VulnerabilityPanel';
 import ChatPanel from '../../../gui/src/components/Chat/ChatPanel';
+import DiffViewer from '../../../gui/src/components/DiffViewer/DiffViewer';
 
 // Services
 import { loadWorkspace, WorkspaceConfig, getVulnerabilitiesForFile, SEVERITY_COLORS } from './services/vulnerabilityLoader';
 import { FileNode, readFileContent, writeFileContent, sortFileTree, loadRepositoryTree, deleteFile } from './services/repositoryService';
 import { Vulnerability } from '../../../gui/src/store/vulnerabilitySlice';
+import { selectPendingDiffZones, selectFixStream } from '../../../gui/src/store/diffSlice';
 
 // AI Fix Engine Integration
 import { useAIFixEngine } from './hooks/useAIFixEngine';
@@ -83,7 +85,12 @@ const AppContent: React.FC = () => {
   const [rightPanelWidth] = useState(350);
   const [showVulnerabilityPanel, setShowVulnerabilityPanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(false);
+  const [showFixesPanel, setShowFixesPanel] = useState(false);
   const [vulnerabilityDecorations, setVulnerabilityDecorations] = useState<VulnerabilityDecoration[]>([]);
+
+  // DiffViewer selectors
+  const pendingDiffZones = useSelector(selectPendingDiffZones);
+  const fixStream = useSelector(selectFixStream);
 
   const editorRef = useRef<MonacoEditorRef>(null);
 
@@ -262,6 +269,17 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSaveFile, handleRefreshFileTree]);
 
+  // Auto-show fixes panel when fix stream starts or pending zones appear
+  useEffect(() => {
+    const isStreaming = fixStream && !fixStream.isComplete && !fixStream.error;
+    const hasPending = pendingDiffZones.length > 0;
+    const hasError = fixStream && fixStream.error;
+
+    if (isStreaming || hasPending || hasError) {
+      setShowFixesPanel(true);
+    }
+  }, [fixStream, pendingDiffZones.length]);
+
   // Sync vulnerabilities with AI Fix Engine service
   useEffect(() => {
     if (vulnerabilities.length > 0) {
@@ -330,6 +348,16 @@ const AppContent: React.FC = () => {
             title="AI Chat"
           >
             💬
+          </div>
+          <div
+            className={`activity-bar-item ${showFixesPanel ? 'active' : ''}`}
+            onClick={() => setShowFixesPanel(!showFixesPanel)}
+            title="AI Fixes"
+          >
+            🔧
+            {pendingDiffZones.length > 0 && (
+              <span className="fixes-badge">{pendingDiffZones.length}</span>
+            )}
           </div>
           <div className="activity-bar-spacer" />
           <div
@@ -434,26 +462,51 @@ const AppContent: React.FC = () => {
             <ChatPanel />
           </div>
         )}
+
+        {/* Right sidebar - AI Fixes */}
+        {showFixesPanel && (
+          <div
+            className="right-sidebar fixes-panel"
+            style={{ width: rightPanelWidth }}
+          >
+            <div className="sidebar-header">AI FIXES</div>
+            <div className="fixes-panel-content">
+              <DiffViewer />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status bar */}
       <div className="status-bar">
         <div className="status-left">
-          <span className="status-item">🛡️ SecureFix IDE</span>
-          <span className="status-item">{summary.total} vulnerabilities</span>
+          <span className="status-item" style={{ fontWeight: 600 }}>SecureFix IDE</span>
+          {summary.total > 0 && (
+            <span className="status-item">
+              {summary.critical > 0 && <span style={{ color: '#ff6b6b', fontWeight: 600 }}>{summary.critical}C</span>}
+              {summary.critical > 0 && summary.high > 0 && <span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>}
+              {summary.high > 0 && <span style={{ color: '#ffa94d' }}>{summary.high}H</span>}
+              {(summary.critical > 0 || summary.high > 0) && summary.medium > 0 && <span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>}
+              {summary.medium > 0 && <span style={{ color: '#ffd43b' }}>{summary.medium}M</span>}
+              {(summary.critical > 0 || summary.high > 0 || summary.medium > 0) && summary.low > 0 && <span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>}
+              {summary.low > 0 && <span style={{ color: '#74c0fc' }}>{summary.low}L</span>}
+              <span style={{ opacity: 0.5, marginLeft: 4 }}>({summary.total} total)</span>
+            </span>
+          )}
           <span
             className={`status-item ai-status ${aiConnected ? 'connected' : 'disconnected'}`}
             onClick={checkAIConnection}
             title={aiError || (aiConnected ? 'AI Fix Engine connected' : 'AI Fix Engine offline - click to retry')}
           >
-            {aiChecking ? '🔄 Checking...' : aiConnected ? '🤖 AI Connected' : '⚠️ AI Offline'}
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', backgroundColor: aiChecking ? '#ffd43b' : aiConnected ? '#51cf66' : '#ff6b6b', marginRight: 4 }} />
+            {aiChecking ? 'Checking...' : aiConnected ? 'AI Connected' : 'AI Offline'}
           </span>
         </div>
         <div className="status-right">
           {activeFile && (
             <>
-              <span className="status-item">{activeFile.language}</span>
-              <span className="status-item">UTF-8</span>
+              <span className="status-item" style={{ fontFamily: 'monospace', fontSize: 11 }}>{activeFile.language}</span>
+              <span className="status-item" style={{ opacity: 0.6 }}>UTF-8</span>
             </>
           )}
         </div>
@@ -464,9 +517,9 @@ const AppContent: React.FC = () => {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 8px 16px;
-          background: #323233;
-          border-bottom: 1px solid #3c3c3c;
+          padding: 6px 16px;
+          background: #252526;
+          border-bottom: 1px solid #333333;
         }
 
         .header-left {
@@ -692,10 +745,11 @@ const AppContent: React.FC = () => {
         .status-bar {
           display: flex;
           justify-content: space-between;
-          padding: 4px 12px;
-          background: #007acc;
-          font-size: 12px;
-          color: #fff;
+          padding: 3px 12px;
+          background: linear-gradient(90deg, #1a6fb5 0%, #1976c2 100%);
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.9);
+          letter-spacing: 0.01em;
         }
 
         .status-left, .status-right {
@@ -726,6 +780,47 @@ const AppContent: React.FC = () => {
 
         .ai-status.disconnected {
           color: #f48771;
+        }
+
+        /* Fixes badge */
+        .activity-bar-item {
+          position: relative;
+        }
+
+        .fixes-badge {
+          position: absolute;
+          top: 2px;
+          right: 2px;
+          min-width: 16px;
+          height: 16px;
+          background: #e74c3c;
+          color: #fff;
+          font-size: 9px;
+          font-weight: 700;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0 4px;
+          line-height: 1;
+          animation: badge-pop 0.3s ease-out;
+        }
+
+        @keyframes badge-pop {
+          0% { transform: scale(0); }
+          60% { transform: scale(1.2); }
+          100% { transform: scale(1); }
+        }
+
+        /* Fixes panel */
+        .fixes-panel {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .fixes-panel-content {
+          flex: 1;
+          overflow: auto;
         }
       `}</style>
     </div>

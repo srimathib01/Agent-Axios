@@ -33,7 +33,7 @@ class AIFixService:
             azure_endpoint=endpoint,
             deployment_name=deployment,
             api_version=api_version,
-            temperature=0.1,
+            temperature=1,
             streaming=True
         )
 
@@ -59,7 +59,7 @@ class AIFixService:
 
 Your task: Generate a code fix using the SEARCH/REPLACE block format.
 
-Output format:
+CRITICAL OUTPUT FORMAT - you MUST use EXACTLY this format:
 <<<SEARCH
 original vulnerable code (copy exactly from the input)
 >>>
@@ -67,16 +67,15 @@ original vulnerable code (copy exactly from the input)
 secure fixed code
 >>>
 
-Guidelines:
-- The vulnerable code is provided below - use it directly
-- Generate one fix block with the exact code to search and replace
-- Keep the fix minimal and focused on the security issue
-- Preserve existing code style and indentation
-
-If additional context would help (like function signatures or imports), output:
-<<<NEED_CONTEXT
-description of what additional information would be helpful
->>>"""
+RULES:
+1. ALWAYS generate a fix. Never refuse or say you need more context.
+2. The SEARCH block must contain the EXACT vulnerable code provided below (copy it verbatim).
+3. The REPLACE block must contain the secure replacement code.
+4. Keep the fix minimal and focused on the security issue.
+5. Preserve existing code style and indentation.
+6. Do NOT wrap code in markdown fences (no ``` inside the blocks).
+7. Do NOT add any text before or after the SEARCH/REPLACE blocks.
+8. Generate exactly ONE SEARCH/REPLACE pair."""
 
         # Build comprehensive context
         context_parts = []
@@ -89,21 +88,21 @@ description of what additional information would be helpful
 
         full_context = "\n\n".join(context_parts) if context_parts else "No additional context available"
 
+        recommendation = vulnerability.get('recommendation', '')
+
         user_prompt = f"""Security Vulnerability Details:
 - ID: {cve_id}
 - Title: {title}
 - Severity: {severity}
 - File: {file_path} (lines {line_start}-{line_end})
+{f"- Fix guidance: {recommendation}" if recommendation else ""}
 
-Vulnerable Code:
-```
+Vulnerable Code (copy this EXACTLY into the <<<SEARCH block):
 {vulnerable_code}
-```
 
-Context:
-{full_context}
+{f"Context:{chr(10)}{full_context}" if context_parts else ""}
 
-Generate the fix using <<<SEARCH and <<<REPLACE blocks."""
+Now output the fix as <<<SEARCH and <<<REPLACE blocks. Copy the vulnerable code exactly into SEARCH, then write the fixed version in REPLACE."""
 
         return [
             SystemMessage(content=system_prompt),
@@ -164,6 +163,8 @@ Generate the fix using <<<SEARCH and <<<REPLACE blocks."""
                 'raw_response': '...'
             }
         """
+        import re
+
         result = {
             'raw_response': response,
             'search_blocks': [],
@@ -175,30 +176,54 @@ Generate the fix using <<<SEARCH and <<<REPLACE blocks."""
         # Check if AI needs more context
         if '<<<NEED_CONTEXT' in response:
             result['type'] = 'need_context'
-            # Extract what context is needed
-            context_parts = response.split('<<<NEED_CONTEXT')
-            for part in context_parts[1:]:
-                if '>>>' in part:
-                    needed = part.split('>>>')[0].strip()
-                    result['context_needed'].append(needed)
-            return result
+            context_matches = re.findall(r'<<<NEED_CONTEXT\s*\n([\s\S]*?)\n?>>>', response)
+            result['context_needed'] = [m.strip() for m in context_matches]
+            # If there are ALSO fix blocks, don't return early - try to parse them too
+            if not ('<<<SEARCH' in response):
+                return result
 
-        # Parse SEARCH/REPLACE blocks
-        search_parts = response.split('<<<SEARCH')
+        # Strategy 1: Paired SEARCH/REPLACE blocks using regex
+        paired_pattern = re.compile(
+            r'<<<SEARCH\s*\n([\s\S]*?)\n>>>[\s\n]*<<<REPLACE\s*\n([\s\S]*?)\n>>>',
+            re.MULTILINE
+        )
+        for match in paired_pattern.finditer(response):
+            search_block = match.group(1).strip()
+            replace_block = match.group(2).strip()
+            if search_block:  # Only add non-empty search blocks
+                result['search_blocks'].append(search_block)
+                result['replace_blocks'].append(replace_block)
 
-        for part in search_parts[1:]:
-            if '>>>' in part:
-                search_block = part.split('>>>')[0].strip()
-                remaining = part.split('>>>')[1]
+        # Strategy 2: If paired didn't work, try extracting separately
+        if not result['search_blocks']:
+            search_matches = re.findall(r'<<<SEARCH\s*\n([\s\S]*?)\n>>>', response)
+            replace_matches = re.findall(r'<<<REPLACE\s*\n([\s\S]*?)\n>>>', response)
 
-                # Look for corresponding REPLACE
-                if '<<<REPLACE' in remaining:
-                    replace_part = remaining.split('<<<REPLACE')[1]
-                    if '>>>' in replace_part:
-                        replace_block = replace_part.split('>>>')[0].strip()
+            for s in search_matches:
+                s = s.strip()
+                if s:
+                    result['search_blocks'].append(s)
+            for r in replace_matches:
+                result['replace_blocks'].append(r.strip())
 
-                        result['search_blocks'].append(search_block)
-                        result['replace_blocks'].append(replace_block)
+        # Strategy 3: Handle markdown code fences inside blocks
+        # AI sometimes wraps code in ```language ... ``` inside the SEARCH/REPLACE
+        if not result['search_blocks']:
+            # Try with optional code fences
+            paired_fence = re.compile(
+                r'<<<SEARCH\s*\n```\w*\n([\s\S]*?)\n```\s*\n>>>[\s\n]*<<<REPLACE\s*\n```\w*\n([\s\S]*?)\n```\s*\n>>>',
+                re.MULTILINE
+            )
+            for match in paired_fence.finditer(response):
+                search_block = match.group(1).strip()
+                replace_block = match.group(2).strip()
+                if search_block:
+                    result['search_blocks'].append(search_block)
+                    result['replace_blocks'].append(replace_block)
+
+        logger.info(f"Parsed fix response: {len(result['search_blocks'])} search blocks, {len(result['replace_blocks'])} replace blocks")
+        if not result['search_blocks']:
+            logger.warning(f"No blocks parsed from response ({len(response)} chars). First 500 chars: {response[:500]}")
 
         return result
 
@@ -224,28 +249,65 @@ Generate the fix using <<<SEARCH and <<<REPLACE blocks."""
         try:
             vuln = context.get('vulnerability', {})
 
-            system_prompt = """You are a helpful security assistant. Answer questions about security vulnerabilities,
-secure coding practices, and code security clearly and concisely.
+            system_prompt = """You are a security-focused code assistant. Be BRIEF and CODE-FOCUSED.
 
-Guidelines:
-- Provide clear, educational explanations
-- Include practical examples when relevant
-- Reference CWE/OWASP standards when applicable
-- Keep responses focused and actionable"""
+RULES:
+1. Give short, direct answers (2-3 sentences max for explanations)
+2. Always include code examples when relevant
+3. No filler phrases ("Certainly!", "I'd be happy to", "Of course")
+4. Reference specific CWE IDs, OWASP categories, and provide actionable fixes
+5. If vulnerability context is provided, tailor your answer specifically to that vulnerability
+6. When showing code fixes, use the language and framework from the context
 
-            # Build context info if available
-            context_info = ""
-            if vuln:
-                context_info = f"""
-Current vulnerability context:
-- CWE: {vuln.get('cwe', 'Unknown')}
-- Severity: {vuln.get('severity', 'Unknown')}
-- Description: {vuln.get('description', 'No description')}
-- File: {vuln.get('file_path', context.get('current_file', 'Unknown'))}
-"""
+BAD: "Certainly! I'd be happy to help you with that SQL injection vulnerability. Let me explain..."
+GOOD: "CWE-89 SQL Injection in `user_query()`. Use parameterized queries:\n```python\ncursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))\n```" """
 
-            user_prompt = f"""{context_info}
-User question: {message}"""
+            # Build rich context info from vulnerability data
+            context_parts = []
+            cwe_id = vuln.get('cwe', '')
+            severity = vuln.get('severity', '')
+            description = vuln.get('description', '')
+            file_path = vuln.get('file_path', context.get('current_file', ''))
+            recommendation = vuln.get('recommendation', '')
+            code_snippet = vuln.get('codeSnippet', '')
+            cwe_name = vuln.get('cweName', '')
+            owasp = vuln.get('owasp', '')
+            start_line = vuln.get('startLine', '')
+            end_line = vuln.get('endLine', '')
+
+            if cwe_id or description:
+                context_parts.append("=== VULNERABILITY CONTEXT ===")
+                if cwe_id:
+                    cwe_label = f"CWE-{cwe_id}" if not str(cwe_id).startswith("CWE-") else cwe_id
+                    context_parts.append(f"CWE: {cwe_label}" + (f" ({cwe_name})" if cwe_name else ""))
+                if owasp:
+                    context_parts.append(f"OWASP: {owasp}")
+                if severity:
+                    context_parts.append(f"Severity: {severity.upper()}")
+                if description:
+                    context_parts.append(f"Description: {description}")
+                if file_path:
+                    loc = f"File: {file_path}"
+                    if start_line:
+                        loc += f" (lines {start_line}-{end_line})"
+                    context_parts.append(loc)
+                if recommendation:
+                    context_parts.append(f"Recommendation: {recommendation}")
+                if code_snippet:
+                    context_parts.append(f"Vulnerable code:\n```\n{code_snippet}\n```")
+
+            context_info = "\n".join(context_parts) if context_parts else ""
+
+            if context_info:
+                user_prompt = f"""{context_info}
+
+User question: {message}
+
+Answer specifically about the vulnerability above. Include code examples."""
+            else:
+                user_prompt = f"""User question: {message}
+
+Provide a concise, code-focused answer."""
 
             messages = [
                 SystemMessage(content=system_prompt),

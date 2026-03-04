@@ -370,6 +370,7 @@ fn get_agent_axios_base_path() -> Result<std::path::PathBuf, String> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct AnalysisReport {
     pub generated_at: String,
     pub analysis: serde_json::Value,

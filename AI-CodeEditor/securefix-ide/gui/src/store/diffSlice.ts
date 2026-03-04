@@ -9,6 +9,9 @@ export interface DiffZone {
   suggestedContent: string;
   status: 'pending' | 'applied' | 'rejected' | 'streaming';
   vulnerabilityId: string;
+  searchBlocks: string[];
+  replaceBlocks: string[];
+  filePath: string;
 }
 
 export interface DiffLine {
@@ -21,6 +24,7 @@ interface FixStreamState {
   vulnerabilityId: string;
   content: string;
   isComplete: boolean;
+  error: string | null;
 }
 
 interface DiffState {
@@ -75,6 +79,7 @@ const diffSlice = createSlice({
         vulnerabilityId: action.payload,
         content: '',
         isComplete: false,
+        error: null,
       };
     },
     appendFixStreamContent: (state, action: PayloadAction<string>) => {
@@ -84,6 +89,12 @@ const diffSlice = createSlice({
     },
     completeFixStream: (state) => {
       if (state.fixStream) {
+        state.fixStream.isComplete = true;
+      }
+    },
+    setFixStreamError: (state, action: PayloadAction<string>) => {
+      if (state.fixStream) {
+        state.fixStream.error = action.payload;
         state.fixStream.isComplete = true;
       }
     },
@@ -110,6 +121,7 @@ export const {
   startFixStream,
   appendFixStreamContent,
   completeFixStream,
+  setFixStreamError,
   clearFixStream,
   clearAllDiffZones,
   setDiffZones,

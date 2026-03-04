@@ -21,7 +21,11 @@ import {
   applyDiffZone,
   rejectDiffZone,
   setDiffZones,
+  clearFixStream,
+  setFixStreamError,
 } from '../store/diffSlice';
+import type { DiffZone } from '../store/diffSlice';
+import { backendService } from '../services/backendService';
 
 // Runtime API types
 declare global {
@@ -61,9 +65,9 @@ interface Message {
 }
 
 // Singleton state for the global message listener
-// globalCleanup is kept for potential future use (app-level cleanup)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let globalCleanup: (() => void) | null = null;
+// Exported for app-level cleanup (e.g., hot reload, test teardown)
+// eslint-disable-next-line import/no-mutable-exports
+export let _globalCleanup: (() => void) | null = null;
 let listenerInitialized = false;
 
 /**
@@ -179,7 +183,7 @@ async function initializeGlobalListener(): Promise<void> {
       const unlisten = await window.__TAURI__.event.listen<Message>('core-to-gui', (event) => {
         handleIncomingMessage(event.payload);
       });
-      globalCleanup = unlisten;
+      _globalCleanup = unlisten;
       console.log('[GUI] Tauri event listener set up for core-to-gui (singleton)');
     } catch (err) {
       console.error('[GUI] Failed to set up Tauri listener:', err);
@@ -188,7 +192,7 @@ async function initializeGlobalListener(): Promise<void> {
     }
   } else if (isElectron && window.electronAPI) {
     // Electron: Listen via IPC
-    globalCleanup = window.electronAPI.onMessage('core-to-gui', (data) => {
+    _globalCleanup = window.electronAPI.onMessage('core-to-gui', (data) => {
       handleIncomingMessage(data as Message);
     });
     console.log('[GUI] Electron IPC listener set up (singleton)');
@@ -198,7 +202,7 @@ async function initializeGlobalListener(): Promise<void> {
       handleIncomingMessage(event.detail);
     };
     window.addEventListener('securefix-message', listener as EventListener);
-    globalCleanup = () => {
+    _globalCleanup = () => {
       window.removeEventListener('securefix-message', listener as EventListener);
     };
     console.log('[GUI] VS Code event listener set up (singleton)');
@@ -247,43 +251,123 @@ export function useMessaging() {
     }
   }, []);
 
-  // Helper functions for common messages
+  // Fix generation - directly connects to backend WebSocket
   const requestFix = useCallback(
-    (vulnerabilityId: string, codeContext: unknown) => {
+    (vulnerabilityId: string, codeContext: Record<string, unknown>, vulnerability?: Record<string, unknown>) => {
+      // Prevent duplicate fix requests - check if one is already in progress
+      const currentState = store.getState();
+      if (currentState.diff.fixStream && !currentState.diff.fixStream.isComplete) {
+        console.log('[GUI] Fix already in progress, ignoring duplicate requestFix');
+        return;
+      }
+
       store.dispatch(startFixStream(vulnerabilityId));
-      sendMessage({
-        type: 'request_fix',
-        id: `msg-${Date.now()}`,
-        timestamp: Date.now(),
-        vulnerabilityId,
+
+      backendService.generateFix(
+        vulnerability || {},
         codeContext,
-      });
+        {
+          onChunk: (content: string) => {
+            store.dispatch(appendFixStreamContent(content));
+          },
+          onComplete: (data) => {
+            console.log('[GUI] Fix onComplete received:', {
+              searchBlocks: data.searchBlocks.length,
+              replaceBlocks: data.replaceBlocks.length,
+              fullContentLen: data.fullContent.length,
+            });
+
+            store.dispatch(completeFixStream());
+
+            // Create DiffZone with search/replace blocks
+            if (data.searchBlocks.length > 0 && data.replaceBlocks.length > 0) {
+              const filePath = (codeContext.fileUri || codeContext.file_path || '') as string;
+              console.log('[GUI] Creating DiffZone for:', filePath);
+              console.log('[GUI] Search block preview:', data.searchBlocks[0].substring(0, 100));
+              console.log('[GUI] Replace block preview:', data.replaceBlocks[0].substring(0, 100));
+
+              const diffZone: DiffZone = {
+                id: `fix-${Date.now()}`,
+                fileUri: filePath,
+                startLine: (codeContext.startLine || codeContext.start_line || 1) as number,
+                endLine: (codeContext.endLine || codeContext.end_line || 1) as number,
+                originalContent: data.searchBlocks.join('\n'),
+                suggestedContent: data.replaceBlocks.join('\n'),
+                status: 'pending',
+                vulnerabilityId,
+                searchBlocks: data.searchBlocks,
+                replaceBlocks: data.replaceBlocks,
+                filePath,
+              };
+              store.dispatch(addDiffZone(diffZone));
+              console.log('[GUI] DiffZone dispatched:', diffZone.id);
+            } else {
+              console.warn('[GUI] No search/replace blocks found in fix response!');
+              console.warn('[GUI] Full content:', data.fullContent.substring(0, 500));
+            }
+
+            store.dispatch(clearFixStream());
+          },
+          onError: (error: string) => {
+            console.error('[GUI] Fix generation error:', error);
+            store.dispatch(setFixStreamError(error));
+          },
+        }
+      );
     },
-    [sendMessage]
+    []
   );
 
+  // Apply fix - calls backend HTTP endpoint to modify the file
   const applyFix = useCallback(
-    (diffZoneId: string) => {
-      sendMessage({
-        type: 'apply_fix',
-        id: `msg-${Date.now()}`,
-        timestamp: Date.now(),
-        diffZoneId,
-      });
+    async (diffZoneId: string) => {
+      const state = store.getState();
+      const zone = state.diff.diffZones.find((z: DiffZone) => z.id === diffZoneId);
+      if (!zone) {
+        console.error('[GUI] DiffZone not found:', diffZoneId);
+        return;
+      }
+
+      try {
+        // Apply each search/replace block
+        for (let i = 0; i < zone.searchBlocks.length; i++) {
+          await backendService.applyFix(
+            zone.filePath,
+            zone.searchBlocks[i],
+            zone.replaceBlocks[i],
+            zone.vulnerabilityId
+          );
+        }
+
+        // Update Redux state on success
+        store.dispatch(applyDiffZone(diffZoneId));
+        store.dispatch(markAsFixed(zone.vulnerabilityId));
+        console.log('[GUI] Fix applied successfully to:', zone.filePath);
+      } catch (error) {
+        console.error('[GUI] Failed to apply fix:', error);
+        // Could dispatch an error state here
+      }
     },
-    [sendMessage]
+    []
   );
 
+  // Reject fix - calls backend and updates state
   const rejectFix = useCallback(
-    (diffZoneId: string) => {
-      sendMessage({
-        type: 'reject_fix',
-        id: `msg-${Date.now()}`,
-        timestamp: Date.now(),
-        diffZoneId,
-      });
+    async (diffZoneId: string) => {
+      const state = store.getState();
+      const zone = state.diff.diffZones.find((z: DiffZone) => z.id === diffZoneId);
+
+      store.dispatch(rejectDiffZone(diffZoneId));
+
+      if (zone) {
+        try {
+          await backendService.rejectFix(zone.vulnerabilityId, 'User rejected');
+        } catch (error) {
+          console.error('[GUI] Failed to notify backend of rejection:', error);
+        }
+      }
     },
-    [sendMessage]
+    []
   );
 
   const scanRepository = useCallback(
@@ -301,7 +385,7 @@ export function useMessaging() {
   );
 
   const sendChatMessage = useCallback(
-    (content: string, context?: { currentFile?: string; selectedVulnerability?: string }) => {
+    (content: string, context?: { currentFile?: string; selectedVulnerability?: string; vulnerability?: Record<string, unknown> }) => {
       const messageId = `msg-${Date.now()}`;
 
       // Add user message
@@ -328,15 +412,31 @@ export function useMessaging() {
       store.dispatch(setStreamingMessageId(messageId));
       store.dispatch(setChatLoading(true));
 
-      sendMessage({
-        type: 'chat_message',
-        id: messageId,
-        timestamp: Date.now(),
+      // Use direct backend WebSocket for chat
+      backendService.chat(
         content,
-        context,
-      });
+        {
+          vulnerability: context?.vulnerability || {},
+          currentFile: context?.currentFile || '',
+        },
+        {
+          onChunk: (chunk: string) => {
+            store.dispatch(appendToMessage({ id: messageId, content: chunk }));
+          },
+          onComplete: () => {
+            store.dispatch(setStreamingMessageId(null));
+            store.dispatch(setChatLoading(false));
+          },
+          onError: (error: string) => {
+            console.error('[GUI] Chat error:', error);
+            store.dispatch(appendToMessage({ id: messageId, content: `\n\n*Error: ${error}*` }));
+            store.dispatch(setStreamingMessageId(null));
+            store.dispatch(setChatLoading(false));
+          },
+        }
+      );
     },
-    [sendMessage]
+    []
   );
 
   const navigateToVulnerability = useCallback(
