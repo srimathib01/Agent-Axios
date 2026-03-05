@@ -21,10 +21,13 @@ import {
   selectVulnerabilitySummary,
 } from '../../../gui/src/store/vulnerabilitySlice';
 import { MonacoEditor, MonacoEditorRef, VulnerabilityDecoration } from '../../editor';
+import { Shield, FolderGit2, MessagesSquare, Wrench, GitBranchPlus, Settings2, FileCode2, X, AlertTriangle } from 'lucide-react';
+
 
 // Components
 import WorkspaceLoader from './components/WorkspaceLoader';
 import FileExplorer from './components/FileExplorer';
+import SourceControlPanel from './components/SourceControlPanel';
 import VulnerabilityPanel from '../../../gui/src/components/VulnerabilityPanel/VulnerabilityPanel';
 import ChatPanel from '../../../gui/src/components/Chat/ChatPanel';
 import DiffViewer from '../../../gui/src/components/DiffViewer/DiffViewer';
@@ -81,12 +84,54 @@ const AppContent: React.FC = () => {
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1);
 
   // UI state
-  const [leftPanelWidth] = useState(280);
-  const [rightPanelWidth] = useState(350);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(280);
+  const [rightPanelWidth, setRightPanelWidth] = useState(350);
+  const [explorerHeightPercent, setExplorerHeightPercent] = useState(50);
+  const [isResizingLeft, setIsResizingLeft] = useState(false);
+  const [isResizingRight, setIsResizingRight] = useState(false);
+  const [isResizingVertical, setIsResizingVertical] = useState(false);
   const [showVulnerabilityPanel, setShowVulnerabilityPanel] = useState(true);
+  const [showSourceControlPanel, setShowSourceControlPanel] = useState(false);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [showFixesPanel, setShowFixesPanel] = useState(false);
   const [vulnerabilityDecorations, setVulnerabilityDecorations] = useState<VulnerabilityDecoration[]>([]);
+
+  // Resize handlers
+  const startResizingLeft = useCallback(() => setIsResizingLeft(true), []);
+  const startResizingRight = useCallback(() => setIsResizingRight(true), []);
+  const startResizingVertical = useCallback(() => setIsResizingVertical(true), []);
+  const stopResizing = useCallback(() => {
+    setIsResizingLeft(false);
+    setIsResizingRight(false);
+    setIsResizingVertical(false);
+  }, []);
+
+  const handleResize = useCallback((e: MouseEvent) => {
+    if (isResizingLeft) {
+      const newWidth = e.clientX - 56; // 56px Activity Bar
+      if (newWidth > 150 && newWidth < 800) setLeftPanelWidth(newWidth);
+    } else if (isResizingRight) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 250 && newWidth < 800) setRightPanelWidth(newWidth);
+    } else if (isResizingVertical) {
+      // Approximate height using clientY
+      const headerHeight = 40;
+      const windowHeight = window.innerHeight;
+      const newPercent = ((e.clientY - headerHeight) / (windowHeight - headerHeight)) * 100;
+      if (newPercent > 10 && newPercent < 90) setExplorerHeightPercent(newPercent);
+    }
+  }, [isResizingLeft, isResizingRight, isResizingVertical]);
+
+  useEffect(() => {
+    if (isResizingLeft || isResizingRight || isResizingVertical) {
+      document.addEventListener('mousemove', handleResize);
+      document.addEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizingLeft, isResizingRight, isResizingVertical, handleResize, stopResizing]);
 
   // DiffViewer selectors
   const pendingDiffZones = useSelector(selectPendingDiffZones);
@@ -304,14 +349,16 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#1e1e1e]">
+    <div className={`flex flex-col h-screen bg-[#1e1e1e] ${isResizingLeft || isResizingRight ? 'select-none cursor-col-resize pointer-events-none' : isResizingVertical ? 'select-none cursor-row-resize pointer-events-none' : ''}`}>
       {/* Header bar */}
-      <div className="header-bar">
-        <div className="header-left">
-          <span className="header-logo">🛡️</span>
-          <span className="header-title">SecureFix IDE</span>
-          <span className="header-separator">|</span>
-          <span className="header-workspace">{config.repositoryPath.split(/[/\\]/).pop()}</span>
+      <div className="header-bar bg-[#0B0D11] border-b border-[#222533] px-4 py-2 flex justify-between items-center text-sm shadow-sm z-10">
+        <div className="header-left flex items-center gap-3">
+          <Shield className="w-5 h-5 text-blue-500" />
+          <span className="header-title font-semibold text-gray-100 tracking-wide">SecureFix IDE</span>
+          <span className="header-separator text-gray-600">|</span>
+          <span className="header-workspace text-gray-400 text-xs font-medium bg-[#1A1D27] px-2 py-0.5 rounded-md border border-[#2A2E3D]">
+            {config.repositoryPath.split(/[/\\]/).pop()}
+          </span>
         </div>
         <div className="header-right">
           <div className="header-stats">
@@ -334,50 +381,75 @@ const AppContent: React.FC = () => {
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Activity bar */}
-        <div className="activity-bar">
+        <div className="activity-bar w-14 bg-[#0B0D11] border-r border-[#222533] flex flex-col items-center py-4 gap-2 z-10">
           <div
-            className={`activity-bar-item ${showVulnerabilityPanel ? 'active' : ''}`}
-            onClick={() => setShowVulnerabilityPanel(!showVulnerabilityPanel)}
+            className={`activity-bar-item group relative flex items-center justify-center w-10 h-10 rounded-xl cursor-pointer transition-all duration-200 ${showVulnerabilityPanel ? 'bg-blue-500/10 text-blue-400' : 'text-gray-500 hover:text-gray-300 hover:bg-[#1A1D27]'
+              }`}
+            onClick={() => {
+              setShowVulnerabilityPanel(!showVulnerabilityPanel);
+              if (!showVulnerabilityPanel) setShowSourceControlPanel(false);
+            }}
             title="Explorer & Vulnerabilities"
           >
-            📁
+            <FolderGit2 className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.5} />
+            {showVulnerabilityPanel && <div className="absolute left-0 w-1 h-5 bg-blue-500 rounded-r-md" />}
           </div>
           <div
-            className={`activity-bar-item ${showChatPanel ? 'active' : ''}`}
+            className={`activity-bar-item group relative flex items-center justify-center w-10 h-10 rounded-xl cursor-pointer transition-all duration-200 ${showSourceControlPanel ? 'bg-indigo-500/10 text-indigo-400' : 'text-gray-500 hover:text-gray-300 hover:bg-[#1A1D27]'
+              }`}
+            onClick={() => {
+              setShowSourceControlPanel(!showSourceControlPanel);
+              if (!showSourceControlPanel) setShowVulnerabilityPanel(false);
+            }}
+            title="Source Control"
+          >
+            <GitBranchPlus className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.5} />
+            {showSourceControlPanel && <div className="absolute left-0 w-1 h-5 bg-indigo-500 rounded-r-md" />}
+          </div>
+          <div
+            className={`activity-bar-item group relative flex items-center justify-center w-10 h-10 rounded-xl cursor-pointer transition-all duration-200 ${showChatPanel ? 'bg-purple-500/10 text-purple-400' : 'text-gray-500 hover:text-gray-300 hover:bg-[#1A1D27]'
+              }`}
             onClick={() => setShowChatPanel(!showChatPanel)}
             title="AI Chat"
           >
-            💬
+            <MessagesSquare className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.5} />
+            {showChatPanel && <div className="absolute left-0 w-1 h-5 bg-purple-500 rounded-r-md" />}
           </div>
           <div
-            className={`activity-bar-item ${showFixesPanel ? 'active' : ''}`}
+            className={`activity-bar-item group relative flex items-center justify-center w-10 h-10 rounded-xl cursor-pointer transition-all duration-200 ${showFixesPanel ? 'bg-green-500/10 text-green-400' : 'text-gray-500 hover:text-gray-300 hover:bg-[#1A1D27]'
+              }`}
             onClick={() => setShowFixesPanel(!showFixesPanel)}
             title="AI Fixes"
           >
-            🔧
+            <Wrench className="w-5 h-5 transition-transform group-hover:scale-110" strokeWidth={1.5} />
             {pendingDiffZones.length > 0 && (
-              <span className="fixes-badge">{pendingDiffZones.length}</span>
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow-sm border border-[#0B0D11] animate-pulse">
+                {pendingDiffZones.length}
+              </span>
             )}
+            {showFixesPanel && <div className="absolute left-0 w-1 h-5 bg-green-500 rounded-r-md" />}
           </div>
-          <div className="activity-bar-spacer" />
+          <div className="flex-1" />
           <div
-            className="activity-bar-item"
+            className="activity-bar-item group flex items-center justify-center w-10 h-10 rounded-xl cursor-pointer text-gray-500 hover:text-gray-300 hover:bg-[#1A1D27] transition-all duration-200"
             onClick={() => setWorkspaceLoaded(false)}
             title="Change Workspace"
           >
-            ⚙️
+            <Settings2 className="w-5 h-5 transition-transform group-hover:rotate-45" strokeWidth={1.5} />
           </div>
         </div>
 
         {/* Left sidebar */}
         {showVulnerabilityPanel && (
           <div
-            className="left-sidebar"
+            className="left-sidebar bg-[#12141C] border-r border-[#222533] flex flex-col shadow-inner overflow-hidden"
             style={{ width: leftPanelWidth }}
           >
             {/* File explorer */}
-            <div className="sidebar-section" style={{ flex: 1 }}>
-              <div className="sidebar-header">EXPLORER</div>
+            <div className="sidebar-section flex flex-col overflow-hidden" style={{ height: `${explorerHeightPercent}%` }}>
+              <div className="sidebar-header px-4 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-[#222533] bg-[#0F111A]">
+                EXPLORER
+              </div>
               <FileExplorer
                 fileTree={fileTree}
                 vulnerabilities={vulnerabilities}
@@ -388,47 +460,80 @@ const AppContent: React.FC = () => {
               />
             </div>
 
+            {/* Vertical resize handle */}
+            <div
+              className="h-1 cursor-row-resize bg-transparent hover:bg-blue-500 z-40 transition-colors shrink-0 pointer-events-auto -mt-[1px]"
+              onMouseDown={startResizingVertical}
+            />
+
             {/* Vulnerability panel */}
-            <div className="sidebar-section" style={{ flex: 1, borderTop: '1px solid #3c3c3c' }}>
-              <div className="sidebar-header">VULNERABILITIES</div>
-              <div className="sidebar-content">
+            <div className="sidebar-section flex flex-col border-t border-[#222533] overflow-hidden" style={{ height: `${100 - explorerHeightPercent}%` }}>
+              <div className="sidebar-header px-4 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-[#222533] bg-[#0F111A] flex items-center gap-2">
+                <AlertTriangle className="w-3 h-3" /> VULNERABILITIES
+              </div>
+              <div className="sidebar-content flex-1 overflow-hidden">
                 <VulnerabilityPanel />
               </div>
             </div>
           </div>
         )}
 
+        {/* Left sidebar - Source Control */}
+        {showSourceControlPanel && (
+          <div
+            className="left-sidebar bg-[#12141C] border-r border-[#222533] flex flex-col shadow-inner overflow-hidden"
+            style={{ width: leftPanelWidth }}
+          >
+            <SourceControlPanel
+              repositoryPath={config.repositoryPath}
+              onFileClick={handleOpenFile}
+            />
+          </div>
+        )}
+
+        {/* Left sidebar resize handle */}
+        {(showVulnerabilityPanel || showSourceControlPanel) && (
+          <div
+            className="w-1 bg-transparent hover:bg-blue-500 cursor-col-resize z-40 transition-colors shrink-0 border-r border-transparent hover:border-blue-500 pointer-events-auto -ml-[1px]"
+            onMouseDown={startResizingLeft}
+          />
+        )}
+
         {/* Main editor area */}
-        <div className="editor-area">
+        <div className={`editor-area flex-1 flex flex-col min-w-0 overflow-hidden bg-[#0F111A] ${isResizingLeft || isResizingRight ? 'pointer-events-none' : 'pointer-events-auto'}`}>
           {/* Tabs */}
           {openFiles.length > 0 && (
-            <div className="tabs-bar">
+            <div className="tabs-bar flex bg-[#0B0D11] border-b border-[#222533] overflow-x-auto shadow-sm snap-x">
               {openFiles.map((file, index) => (
                 <div
                   key={file.path}
-                  className={`tab ${index === activeFileIndex ? 'active' : ''}`}
+                  className={`tab group flex items-center justify-between gap-3 px-4 py-2 cursor-pointer border-r border-[#222533] text-[13px] transition-all duration-200 snap-start shrink-0 min-w-[120px] max-w-[200px] ${index === activeFileIndex
+                    ? 'bg-[#12141C] text-blue-400 border-t-2 border-t-blue-500'
+                    : 'text-gray-400 hover:bg-[#1A1D27] hover:text-gray-200 border-t-2 border-t-transparent'
+                    }`}
                   onClick={() => setActiveFileIndex(index)}
                 >
-                  <span className="tab-name">
-                    {file.isDirty && <span className="dirty-indicator">●</span>}
-                    {file.name}
+                  <span className="tab-name flex items-center gap-2 truncate flex-1 font-medium">
+                    {file.isDirty ? <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" /> : <FileCode2 className="w-3.5 h-3.5 opacity-70 shrink-0" />}
+                    <span className="truncate">{file.name}</span>
                   </span>
-                  <span
-                    className="tab-close"
+                  <button
+                    className={`tab-close rounded p-0.5 transition-all duration-200 ${index === activeFileIndex ? 'opacity-100 hover:bg-[#222533] hover:text-white' : 'opacity-0 group-hover:opacity-100 hover:bg-[#2A2E3D]'
+                      }`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleCloseFile(index);
                     }}
                   >
-                    ✕
-                  </span>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ))}
             </div>
           )}
 
           {/* Editor */}
-          <div className="editor-content">
+          <div className="editor-content flex-1 overflow-hidden relative">
             {activeFile ? (
               <MonacoEditor
                 ref={editorRef}
@@ -440,12 +545,14 @@ const AppContent: React.FC = () => {
                 vulnerabilityDecorations={vulnerabilityDecorations}
               />
             ) : (
-              <div className="editor-placeholder">
-                <div className="placeholder-content">
-                  <span className="placeholder-icon">📂</span>
-                  <p>Select a file to view</p>
-                  <p className="placeholder-hint">
-                    Files with vulnerabilities are highlighted in the explorer
+              <div className="editor-placeholder flex items-center justify-center h-full bg-[#0F111A]">
+                <div className="placeholder-content text-center flex flex-col items-center">
+                  <div className="w-24 h-24 mb-6 rounded-2xl bg-gradient-to-tr from-[#1A1D27] to-[#222533] flex items-center justify-center shadow-lg border border-[#2A2E3D]">
+                    <FileCode2 className="w-12 h-12 text-gray-500" strokeWidth={1} />
+                  </div>
+                  <h3 className="text-xl font-medium text-gray-300 mb-2">Select a file to view</h3>
+                  <p className="text-sm text-gray-500 max-w-sm">
+                    Navigate through the Explorer or Source Control to open and edit project files
                   </p>
                 </div>
               </div>
@@ -453,10 +560,18 @@ const AppContent: React.FC = () => {
           </div>
         </div>
 
+        {/* Right sidebar resize handle */}
+        {(showChatPanel || showFixesPanel) && (
+          <div
+            className="w-1 bg-transparent hover:bg-blue-500 cursor-col-resize z-40 transition-colors shrink-0 border-l border-transparent hover:border-blue-500 pointer-events-auto -mr-[1px]"
+            onMouseDown={startResizingRight}
+          />
+        )}
+
         {/* Right sidebar - Chat */}
         {showChatPanel && (
           <div
-            className="right-sidebar"
+            className="right-sidebar bg-[#12141C] border-l border-[#222533] shadow-inner"
             style={{ width: rightPanelWidth }}
           >
             <ChatPanel />
@@ -466,10 +581,12 @@ const AppContent: React.FC = () => {
         {/* Right sidebar - AI Fixes */}
         {showFixesPanel && (
           <div
-            className="right-sidebar fixes-panel"
+            className="right-sidebar fixes-panel bg-[#12141C] border-l border-[#222533] flex flex-col shadow-inner"
             style={{ width: rightPanelWidth }}
           >
-            <div className="sidebar-header">AI FIXES</div>
+            <div className="sidebar-header px-4 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-[#222533] bg-[#0F111A] flex items-center gap-2">
+              <Wrench className="w-3 h-3" /> AI FIXES
+            </div>
             <div className="fixes-panel-content">
               <DiffViewer />
             </div>
@@ -478,344 +595,63 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* Status bar */}
-      <div className="status-bar">
-        <div className="status-left">
-          <span className="status-item" style={{ fontWeight: 600 }}>SecureFix IDE</span>
+      <div className="status-bar bg-[#0B0D11] border-t border-[#222533] px-3 py-1 flex justify-between items-center text-[11px] text-gray-400 z-10 bottom-0 select-none">
+        <div className="status-left flex gap-4">
+          <span className="status-item font-semibold text-gray-300">SecureFix IDE</span>
           {summary.total > 0 && (
-            <span className="status-item">
-              {summary.critical > 0 && <span style={{ color: '#ff6b6b', fontWeight: 600 }}>{summary.critical}C</span>}
-              {summary.critical > 0 && summary.high > 0 && <span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>}
-              {summary.high > 0 && <span style={{ color: '#ffa94d' }}>{summary.high}H</span>}
-              {(summary.critical > 0 || summary.high > 0) && summary.medium > 0 && <span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>}
-              {summary.medium > 0 && <span style={{ color: '#ffd43b' }}>{summary.medium}M</span>}
-              {(summary.critical > 0 || summary.high > 0 || summary.medium > 0) && summary.low > 0 && <span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>}
-              {summary.low > 0 && <span style={{ color: '#74c0fc' }}>{summary.low}L</span>}
-              <span style={{ opacity: 0.5, marginLeft: 4 }}>({summary.total} total)</span>
+            <span className="status-item flex items-center gap-1.5 bg-[#12141C] px-2 py-0.5 rounded-sm border border-[#222533]">
+              {summary.critical > 0 && <span className="text-red-400 font-bold">{summary.critical}C</span>}
+              {summary.critical > 0 && summary.high > 0 && <span className="text-gray-600">/</span>}
+              {summary.high > 0 && <span className="text-orange-400 font-medium">{summary.high}H</span>}
+              {(summary.critical > 0 || summary.high > 0) && summary.medium > 0 && <span className="text-gray-600">/</span>}
+              {summary.medium > 0 && <span className="text-yellow-400">{summary.medium}M</span>}
+              {(summary.critical > 0 || summary.high > 0 || summary.medium > 0) && summary.low > 0 && <span className="text-gray-600">/</span>}
+              {summary.low > 0 && <span className="text-blue-400">{summary.low}L</span>}
             </span>
           )}
           <span
-            className={`status-item ai-status ${aiConnected ? 'connected' : 'disconnected'}`}
+            className={`status-item flex items-center gap-1.5 px-2 py-0.5 rounded-sm cursor-pointer transition-colors border ${aiConnected ? 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20'
+              : aiChecking ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20 hover:bg-yellow-500/20'
+                : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+              }`}
             onClick={checkAIConnection}
             title={aiError || (aiConnected ? 'AI Fix Engine connected' : 'AI Fix Engine offline - click to retry')}
           >
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', backgroundColor: aiChecking ? '#ffd43b' : aiConnected ? '#51cf66' : '#ff6b6b', marginRight: 4 }} />
+            <span className={`w-1.5 h-1.5 rounded-full ${aiChecking ? 'bg-yellow-400 animate-pulse' : aiConnected ? 'bg-green-400' : 'bg-red-400'}`} />
             {aiChecking ? 'Checking...' : aiConnected ? 'AI Connected' : 'AI Offline'}
           </span>
         </div>
-        <div className="status-right">
+        <div className="status-right flex gap-4">
           {activeFile && (
             <>
-              <span className="status-item" style={{ fontFamily: 'monospace', fontSize: 11 }}>{activeFile.language}</span>
-              <span className="status-item" style={{ opacity: 0.6 }}>UTF-8</span>
+              <span className="status-item font-mono bg-[#12141C] px-2 py-0.5 rounded-sm border border-[#222533]">{activeFile.language}</span>
+              <span className="status-item text-gray-500">UTF-8</span>
             </>
           )}
         </div>
       </div>
 
       <style>{`
-        .header-bar {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 6px 16px;
-          background: #252526;
-          border-bottom: 1px solid #333333;
+        /* Global CSS Reset & Overrides */
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          -webkit-font-smoothing: antialiased;
         }
 
-        .header-left {
-          display: flex;
-          align-items: center;
-          gap: 8px;
+        /* Scrollbar aesthetics */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
         }
-
-        .header-logo {
-          font-size: 18px;
+        ::-webkit-scrollbar-track {
+          background: #0B0D11;
         }
-
-        .header-title {
-          font-weight: 600;
-          color: #fff;
+        ::-webkit-scrollbar-thumb {
+          background: #2A2E3D;
+          border-radius: 4px;
         }
-
-        .header-separator {
-          color: #3c3c3c;
-        }
-
-        .header-workspace {
-          color: #808080;
-          font-size: 13px;
-        }
-
-        .header-right {
-          display: flex;
-          align-items: center;
-        }
-
-        .header-stats {
-          display: flex;
-          gap: 8px;
-        }
-
-        .stat {
-          padding: 2px 8px;
-          border-radius: 10px;
-          font-size: 11px;
-          font-weight: 500;
-        }
-
-        .stat.critical {
-          background: rgba(255, 77, 79, 0.2);
-          color: #ff4d4f;
-        }
-
-        .stat.high {
-          background: rgba(250, 140, 22, 0.2);
-          color: #fa8c16;
-        }
-
-        .stat.medium {
-          background: rgba(250, 219, 20, 0.2);
-          color: #fadb14;
-        }
-
-        .stat.low {
-          background: rgba(24, 144, 255, 0.2);
-          color: #1890ff;
-        }
-
-        .activity-bar {
-          width: 48px;
-          background: #333333;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 8px 0;
-        }
-
-        .activity-bar-item {
-          width: 40px;
-          height: 40px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          border-radius: 8px;
-          margin-bottom: 4px;
-          font-size: 18px;
-          opacity: 0.6;
-          transition: all 0.2s;
-        }
-
-        .activity-bar-item:hover {
-          opacity: 1;
-          background: #3c3c3c;
-        }
-
-        .activity-bar-item.active {
-          opacity: 1;
-          background: #094771;
-        }
-
-        .activity-bar-spacer {
-          flex: 1;
-        }
-
-        .left-sidebar {
-          display: flex;
-          flex-direction: column;
-          background: #252526;
-          border-right: 1px solid #3c3c3c;
-          overflow: hidden;
-        }
-
-        .sidebar-section {
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-
-        .sidebar-header {
-          padding: 8px 16px;
-          font-size: 11px;
-          font-weight: 600;
-          color: #808080;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          border-bottom: 1px solid #3c3c3c;
-          flex-shrink: 0;
-        }
-
-        .sidebar-content {
-          flex: 1;
-          overflow: auto;
-        }
-
-        .right-sidebar {
-          background: #252526;
-          border-left: 1px solid #3c3c3c;
-          overflow: hidden;
-        }
-
-        .editor-area {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-        }
-
-        .tabs-bar {
-          display: flex;
-          background: #252526;
-          border-bottom: 1px solid #3c3c3c;
-          overflow-x: auto;
-        }
-
-        .tab {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 16px;
-          cursor: pointer;
-          border-right: 1px solid #3c3c3c;
-          font-size: 13px;
-          color: #808080;
-          transition: background 0.1s;
-        }
-
-        .tab:hover {
-          background: #2d2d2d;
-        }
-
-        .tab.active {
-          background: #1e1e1e;
-          color: #fff;
-          border-bottom: 2px solid #0078d4;
-        }
-
-        .tab-name {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .dirty-indicator {
-          color: #0078d4;
-        }
-
-        .tab-close {
-          font-size: 10px;
-          opacity: 0;
-          transition: opacity 0.1s;
-        }
-
-        .tab:hover .tab-close {
-          opacity: 1;
-        }
-
-        .editor-content {
-          flex: 1;
-          overflow: hidden;
-        }
-
-        .editor-placeholder {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          background: #1e1e1e;
-        }
-
-        .placeholder-content {
-          text-align: center;
-          color: #808080;
-        }
-
-        .placeholder-icon {
-          font-size: 48px;
-          display: block;
-          margin-bottom: 16px;
-        }
-
-        .placeholder-hint {
-          font-size: 12px;
-          margin-top: 8px;
-          color: #606060;
-        }
-
-        .status-bar {
-          display: flex;
-          justify-content: space-between;
-          padding: 3px 12px;
-          background: linear-gradient(90deg, #1a6fb5 0%, #1976c2 100%);
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.9);
-          letter-spacing: 0.01em;
-        }
-
-        .status-left, .status-right {
-          display: flex;
-          gap: 16px;
-        }
-
-        .status-item {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .ai-status {
-          cursor: pointer;
-          padding: 0 8px;
-          border-radius: 3px;
-          transition: background 0.2s;
-        }
-
-        .ai-status:hover {
-          background: rgba(255, 255, 255, 0.1);
-        }
-
-        .ai-status.connected {
-          color: #89d185;
-        }
-
-        .ai-status.disconnected {
-          color: #f48771;
-        }
-
-        /* Fixes badge */
-        .activity-bar-item {
-          position: relative;
-        }
-
-        .fixes-badge {
-          position: absolute;
-          top: 2px;
-          right: 2px;
-          min-width: 16px;
-          height: 16px;
-          background: #e74c3c;
-          color: #fff;
-          font-size: 9px;
-          font-weight: 700;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0 4px;
-          line-height: 1;
-          animation: badge-pop 0.3s ease-out;
-        }
-
-        @keyframes badge-pop {
-          0% { transform: scale(0); }
-          60% { transform: scale(1.2); }
-          100% { transform: scale(1); }
-        }
-
-        /* Fixes panel */
-        .fixes-panel {
-          display: flex;
-          flex-direction: column;
+        ::-webkit-scrollbar-thumb:hover {
+          background: #3c4257;
         }
 
         .fixes-panel-content {

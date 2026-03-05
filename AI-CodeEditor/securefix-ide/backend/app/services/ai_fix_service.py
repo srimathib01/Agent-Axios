@@ -6,7 +6,7 @@ import os
 import logging
 from typing import Dict, Any, Optional, List, Callable
 from langchain_openai import AzureChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 logger = logging.getLogger(__name__)
 
@@ -182,14 +182,22 @@ Now output the fix as <<<SEARCH and <<<REPLACE blocks. Copy the vulnerable code 
             if not ('<<<SEARCH' in response):
                 return result
 
+        def _clean_block(block: str) -> str:
+            block = block.replace('\r\n', '\n')
+            block = block.strip('\n')
+            fence_match = re.match(r'^```\w*\n([\s\S]*?)\n```$', block)
+            if fence_match:
+                block = fence_match.group(1)
+            return block
+
         # Strategy 1: Paired SEARCH/REPLACE blocks using regex
         paired_pattern = re.compile(
             r'<<<SEARCH\s*\n([\s\S]*?)\n>>>[\s\n]*<<<REPLACE\s*\n([\s\S]*?)\n>>>',
             re.MULTILINE
         )
         for match in paired_pattern.finditer(response):
-            search_block = match.group(1).strip()
-            replace_block = match.group(2).strip()
+            search_block = _clean_block(match.group(1))
+            replace_block = _clean_block(match.group(2))
             if search_block:  # Only add non-empty search blocks
                 result['search_blocks'].append(search_block)
                 result['replace_blocks'].append(replace_block)
@@ -200,11 +208,11 @@ Now output the fix as <<<SEARCH and <<<REPLACE blocks. Copy the vulnerable code 
             replace_matches = re.findall(r'<<<REPLACE\s*\n([\s\S]*?)\n>>>', response)
 
             for s in search_matches:
-                s = s.strip()
+                s = _clean_block(s)
                 if s:
                     result['search_blocks'].append(s)
             for r in replace_matches:
-                result['replace_blocks'].append(r.strip())
+                result['replace_blocks'].append(_clean_block(r))
 
         # Strategy 3: Handle markdown code fences inside blocks
         # AI sometimes wraps code in ```language ... ``` inside the SEARCH/REPLACE
@@ -215,8 +223,8 @@ Now output the fix as <<<SEARCH and <<<REPLACE blocks. Copy the vulnerable code 
                 re.MULTILINE
             )
             for match in paired_fence.finditer(response):
-                search_block = match.group(1).strip()
-                replace_block = match.group(2).strip()
+                search_block = _clean_block(match.group(1))
+                replace_block = _clean_block(match.group(2))
                 if search_block:
                     result['search_blocks'].append(search_block)
                     result['replace_blocks'].append(replace_block)

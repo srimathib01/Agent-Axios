@@ -40,6 +40,11 @@ export interface FileContent {
   size: number;
 }
 
+export interface GitFileStatus {
+  path: string;
+  status: string;
+}
+
 // Language detection based on file extension
 const EXTENSION_TO_LANGUAGE: { [key: string]: string } = {
   // Web
@@ -275,6 +280,18 @@ export async function getRepositoryInfo(repoPath: string): Promise<RepositoryInf
 }
 
 /**
+ * Get git status for the repository
+ */
+export async function getGitStatus(repoPath: string): Promise<GitFileStatus[]> {
+  try {
+    return await invoke<GitFileStatus[]>('get_git_status', { repoPath });
+  } catch (error) {
+    console.error('Failed to get git status:', error);
+    return [];
+  }
+}
+
+/**
  * Find file in repository by relative path
  */
 export function resolveFilePath(repoPath: string, relativePath: string): string {
@@ -348,6 +365,7 @@ export default {
   createFile,
   renameFile,
   getRepositoryInfo,
+  getGitStatus,
   resolveFilePath,
   flattenFileTree,
   filterFiles,

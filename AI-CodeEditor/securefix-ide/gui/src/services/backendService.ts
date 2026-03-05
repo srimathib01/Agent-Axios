@@ -33,8 +33,8 @@ function parseSearchReplaceBlocks(content: string): { searchBlocks: string[]; re
   const pairedRegex = /<<<SEARCH\s*\n([\s\S]*?)\n>>>\s*\n<<<REPLACE\s*\n([\s\S]*?)\n>>>/g;
   let match;
   while ((match = pairedRegex.exec(content)) !== null) {
-    searchBlocks.push(match[1].trim());
-    replaceBlocks.push(match[2].trim());
+    searchBlocks.push(match[1].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, ''));
+    replaceBlocks.push(match[2].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, ''));
   }
 
   // If paired didn't work, try extracting them separately
@@ -44,11 +44,11 @@ function parseSearchReplaceBlocks(content: string): { searchBlocks: string[]; re
 
     let sm;
     while ((sm = searchRegex.exec(content)) !== null) {
-      searchBlocks.push(sm[1].trim());
+      searchBlocks.push(sm[1].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, ''));
     }
     let rm;
     while ((rm = replaceRegex.exec(content)) !== null) {
-      replaceBlocks.push(rm[1].trim());
+      replaceBlocks.push(rm[1].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, ''));
     }
   }
 

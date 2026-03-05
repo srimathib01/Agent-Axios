@@ -11,6 +11,7 @@ import logging
 import asyncio
 import threading
 import queue
+import re
 
 from app.services.ai_fix_service import AIFixService
 
@@ -192,6 +193,9 @@ async def apply_fix(request: ApplyFixRequest):
         search_block = request.search_block
         replace_block = request.replace_block
 
+        if not search_block:
+            raise HTTPException(status_code=400, detail='Search block is empty.')
+
         # Read the file
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -200,13 +204,47 @@ async def apply_fix(request: ApplyFixRequest):
             raise HTTPException(status_code=404, detail=f'File not found: {file_path}')
 
         # Apply the fix
-        if search_block not in content:
+        updated_content = None
+
+        if search_block in content:
+            updated_content = content.replace(search_block, replace_block, 1)
+        else:
+            normalized_content = content.replace('\r\n', '\n')
+            normalized_search = search_block.replace('\r\n', '\n')
+            normalized_replace = replace_block.replace('\r\n', '\n')
+
+            if normalized_search in normalized_content:
+                updated_normalized = normalized_content.replace(normalized_search, normalized_replace, 1)
+                updated_content = updated_normalized
+                if '\r\n' in content:
+                    updated_content = updated_content.replace('\n', '\r\n')
+            else:
+                trimmed_search = normalized_search.strip('\n')
+                if trimmed_search:
+                    pattern = re.compile(
+                        rf'(?m)(^|(?<=\n))(?P<indent>[ \t]*){re.escape(trimmed_search)}(?P<trail>[ \t]*)'
+                    )
+                    match = pattern.search(normalized_content)
+                    if match:
+                        indent = match.group('indent') or ''
+                        replacement_candidate = normalized_replace.strip('\n')
+                        if indent and replacement_candidate and not replacement_candidate.startswith((' ', '\t')):
+                            replacement_candidate = f"{indent}{replacement_candidate}"
+
+                        updated_normalized = (
+                            normalized_content[:match.start()] +
+                            replacement_candidate +
+                            normalized_content[match.end():]
+                        )
+                        updated_content = updated_normalized
+                        if '\r\n' in content:
+                            updated_content = updated_content.replace('\n', '\r\n')
+
+        if updated_content is None:
             raise HTTPException(
                 status_code=400,
                 detail='Search block not found in file. Code may have changed.'
             )
-
-        updated_content = content.replace(search_block, replace_block, 1)
 
         # Write back to file
         with open(file_path, 'w', encoding='utf-8') as f:

@@ -8,7 +8,25 @@
 import React, { useState, useMemo } from 'react';
 import { FileNode } from '../services/repositoryService';
 import { Vulnerability } from '../../../../gui/src/store/vulnerabilitySlice';
-import { SEVERITY_COLORS, SEVERITY_ICONS } from '../services/vulnerabilityLoader';
+import { SEVERITY_COLORS } from '../services/vulnerabilityLoader';
+import {
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  FolderOpen,
+  FileCode2,
+  FileText,
+  FileJson,
+  FileImage,
+  Search,
+  X,
+  RefreshCw,
+  MoreVertical,
+  Trash2,
+  Copy,
+  ExternalLink,
+  ShieldAlert
+} from 'lucide-react';
 
 interface FileExplorerProps {
   fileTree: FileNode[];
@@ -26,24 +44,24 @@ interface ContextMenuState {
   node: FileNode | null;
 }
 
-// File type icons
-const FILE_ICONS: Record<string, string> = {
-  javascript: '📜',
-  typescript: '📘',
-  python: '🐍',
-  java: '☕',
-  go: '🔷',
-  rust: '🦀',
-  ruby: '💎',
-  php: '🐘',
-  html: '🌐',
-  css: '🎨',
-  json: '📋',
-  yaml: '⚙️',
-  markdown: '📝',
-  shell: '🖥️',
-  dockerfile: '🐳',
-  default: '📄',
+// File type icon helpers
+const getFileIcon = (node: FileNode, isExpanded: boolean) => {
+  if (node.type === 'directory') {
+    return isExpanded ? <FolderOpen className="w-4 h-4 text-blue-400" /> : <Folder className="w-4 h-4 text-blue-400" />;
+  }
+
+  const ext = node.name.split('.').pop()?.toLowerCase();
+
+  if (['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'go', 'rs', 'php', 'rb', 'html', 'css'].includes(ext || '')) {
+    return <FileCode2 className="w-4 h-4 text-gray-400" />;
+  }
+  if (['json', 'yaml', 'yml'].includes(ext || '')) {
+    return <FileJson className="w-4 h-4 text-yellow-500" />;
+  }
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext || '')) {
+    return <FileImage className="w-4 h-4 text-purple-400" />;
+  }
+  return <FileText className="w-4 h-4 text-gray-500" />;
 };
 
 const FileExplorer: React.FC<FileExplorerProps> = ({
@@ -179,13 +197,7 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     setExpandedDirs(dirsToExpand);
   }, [fileTree, vulnerabilities]);
 
-  // Get icon for file
-  const getFileIcon = (node: FileNode): string => {
-    if (node.type === 'directory') {
-      return expandedDirs.has(node.path) ? '📂' : '📁';
-    }
-    return FILE_ICONS[node.language || 'default'] || FILE_ICONS.default;
-  };
+  // Removed legacy getFileIcon string implementation
 
   // Filter files based on search
   const filterNodes = (nodes: FileNode[]): FileNode[] => {
@@ -215,7 +227,8 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
     return (
       <div key={node.path} className="file-node">
         <div
-          className={`file-node-item ${isActive ? 'active' : ''} ${severity ? `severity-${severity}` : ''}`}
+          className={`group flex items-center px-2 py-1 cursor-pointer text-[13px] transition-colors ${isActive ? 'bg-[#094771] text-white' : 'text-gray-300 hover:bg-[#1A1D27]'
+            } ${severity ? `bg-red-500/10` : ''}`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => {
             if (node.type === 'directory') {
@@ -227,40 +240,42 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
           onContextMenu={(e) => handleContextMenu(e, node)}
         >
           {/* Expand/Collapse indicator for directories */}
-          {node.type === 'directory' && (
-            <span className="expand-indicator">
-              {isExpanded ? '▼' : '▶'}
-            </span>
-          )}
+          <div className="w-4 flex items-center justify-center shrink-0">
+            {node.type === 'directory' && (
+              isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+            )}
+          </div>
 
           {/* File/Folder icon */}
-          <span className="file-icon">{getFileIcon(node)}</span>
+          <span className="flex items-center justify-center mx-1.5 shrink-0">
+            {getFileIcon(node, isExpanded)}
+          </span>
 
           {/* File name */}
-          <span className="file-name">{node.name}</span>
+          <span className="file-name flex-1 truncate">{node.name}</span>
 
           {/* Vulnerability indicator */}
           {severity && (
             <span
-              className="vuln-indicator"
+              className="ml-2 flex items-center"
               style={{ color: SEVERITY_COLORS[severity] }}
               title={`${severity.charAt(0).toUpperCase() + severity.slice(1)} vulnerability`}
             >
-              {SEVERITY_ICONS[severity]}
+              <ShieldAlert className="w-3.5 h-3.5" />
             </span>
           )}
 
           {/* Directory vulnerability indicator */}
           {hasVulnChildren && !severity && (
-            <span className="vuln-count" title="Contains vulnerabilities">
-              ⚠️
+            <span className="ml-2 flex items-center text-yellow-500" title="Contains vulnerabilities">
+              <ShieldAlert className="w-3.5 h-3.5 opacity-70" />
             </span>
           )}
         </div>
 
         {/* Children */}
         {node.type === 'directory' && isExpanded && node.children && (
-          <div className="file-children">
+          <div className="flex flex-col">
             {node.children.map(child => renderNode(child, depth + 1))}
           </div>
         )}
@@ -271,41 +286,44 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
   const filteredTree = filterNodes(fileTree);
 
   return (
-    <div className="file-explorer">
+    <div className="file-explorer flex flex-col h-full bg-[#12141C]">
       {/* Search */}
-      <div className="file-explorer-search">
-        <input
-          type="text"
-          placeholder="Search files..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
-        />
-        {searchTerm && (
-          <button
-            className="search-clear"
-            onClick={() => setSearchTerm('')}
-          >
-            ✕
-          </button>
-        )}
+      <div className="p-2 border-b border-[#222533] relative flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            placeholder="Search files..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-7 pr-7 py-1.5 bg-[#1A1D27] border border-[#2A2E3D] rounded-md text-xs text-gray-200 outline-none focus:border-blue-500 transition-colors"
+          />
+          {searchTerm && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+              onClick={() => setSearchTerm('')}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
         {onRefresh && (
           <button
-            className="refresh-btn"
+            className="p-1.5 rounded-md text-gray-500 hover:text-gray-300 hover:bg-[#1A1D27] transition-colors"
             onClick={onRefresh}
             title="Refresh (F5)"
           >
-            🔄
+            <RefreshCw className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
 
       {/* File Tree */}
-      <div className="file-explorer-tree">
+      <div className="flex-1 overflow-auto py-2">
         {filteredTree.length > 0 ? (
           filteredTree.map(node => renderNode(node))
         ) : (
-          <div className="no-files">
+          <div className="px-4 py-8 text-center text-xs text-gray-500">
             {searchTerm ? 'No matching files' : 'No files in workspace'}
           </div>
         )}
@@ -314,204 +332,34 @@ const FileExplorer: React.FC<FileExplorerProps> = ({
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.node && (
         <div
-          className="context-menu"
+          className="fixed bg-[#1A1D27] border border-[#2A2E3D] rounded-lg shadow-xl z-50 min-w-[160px] py-1 select-none overflow-hidden"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
           {contextMenu.node.type === 'file' && (
-            <div className="context-menu-item" onClick={() => handleContextMenuAction('open')}>
-              📄 Open
+            <div className="px-3 py-1.5 text-xs text-gray-300 hover:bg-blue-500 hover:text-white cursor-pointer flex items-center gap-2" onClick={() => handleContextMenuAction('open')}>
+              <ExternalLink className="w-3.5 h-3.5" /> Open File
             </div>
           )}
-          <div className="context-menu-item" onClick={() => handleContextMenuAction('copyPath')}>
-            📋 Copy Path
+          <div className="px-3 py-1.5 text-xs text-gray-300 hover:bg-blue-500 hover:text-white cursor-pointer flex items-center gap-2" onClick={() => handleContextMenuAction('copyPath')}>
+            <Copy className="w-3.5 h-3.5" /> Copy Path
           </div>
           {onDeleteFile && (
-            <div className="context-menu-item danger" onClick={() => handleContextMenuAction('delete')}>
-              🗑️ Delete
-            </div>
+            <>
+              <div className="h-px bg-[#2A2E3D] my-1" />
+              <div className="px-3 py-1.5 text-xs text-red-400 hover:bg-red-500 hover:text-white cursor-pointer flex items-center gap-2" onClick={() => handleContextMenuAction('delete')}>
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </div>
+            </>
           )}
-          <div className="context-menu-divider" />
-          <div className="context-menu-item" onClick={() => handleContextMenuAction('refresh')}>
-            🔄 Refresh
+          <div className="h-px bg-[#2A2E3D] my-1" />
+          <div className="px-3 py-1.5 text-xs text-gray-300 hover:bg-blue-500 hover:text-white cursor-pointer flex items-center gap-2" onClick={() => handleContextMenuAction('refresh')}>
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </div>
         </div>
       )}
 
       <style>{`
-        .file-explorer {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          background: #252526;
-        }
-
-        .file-explorer-search {
-          padding: 8px;
-          border-bottom: 1px solid #3c3c3c;
-          position: relative;
-        }
-
-        .search-input {
-          width: 100%;
-          padding: 6px 28px 6px 8px;
-          background: #3c3c3c;
-          border: 1px solid #3c3c3c;
-          border-radius: 4px;
-          color: #cccccc;
-          font-size: 12px;
-        }
-
-        .search-input:focus {
-          outline: none;
-          border-color: #0078d4;
-        }
-
-        .search-clear {
-          position: absolute;
-          right: 14px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: none;
-          border: none;
-          color: #808080;
-          cursor: pointer;
-          font-size: 10px;
-          padding: 2px 4px;
-        }
-
-        .search-clear:hover {
-          color: #cccccc;
-        }
-
-        .file-explorer-tree {
-          flex: 1;
-          overflow: auto;
-          padding: 4px 0;
-        }
-
-        .file-node-item {
-          display: flex;
-          align-items: center;
-          padding: 4px 8px;
-          cursor: pointer;
-          font-size: 13px;
-          color: #cccccc;
-          transition: background 0.1s;
-        }
-
-        .file-node-item:hover {
-          background: #2a2d2e;
-        }
-
-        .file-node-item.active {
-          background: #094771;
-        }
-
-        .file-node-item.severity-critical {
-          background: rgba(255, 77, 79, 0.1);
-        }
-
-        .file-node-item.severity-high {
-          background: rgba(250, 140, 22, 0.1);
-        }
-
-        .file-node-item.severity-medium {
-          background: rgba(250, 219, 20, 0.05);
-        }
-
-        .expand-indicator {
-          width: 16px;
-          font-size: 8px;
-          color: #808080;
-          flex-shrink: 0;
-        }
-
-        .file-icon {
-          margin-right: 6px;
-          font-size: 14px;
-          flex-shrink: 0;
-        }
-
-        .file-name {
-          flex: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .vuln-indicator {
-          margin-left: 6px;
-          font-size: 12px;
-        }
-
-        .vuln-count {
-          margin-left: 6px;
-          font-size: 10px;
-          opacity: 0.7;
-        }
-
-        .no-files {
-          padding: 16px;
-          text-align: center;
-          color: #808080;
-          font-size: 12px;
-        }
-
-        .refresh-btn {
-          position: absolute;
-          right: 36px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: none;
-          border: none;
-          color: #808080;
-          cursor: pointer;
-          font-size: 12px;
-          padding: 2px 4px;
-        }
-
-        .refresh-btn:hover {
-          color: #cccccc;
-        }
-
-        .context-menu {
-          position: fixed;
-          background: #252526;
-          border: 1px solid #3c3c3c;
-          border-radius: 4px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-          z-index: 1000;
-          min-width: 150px;
-          padding: 4px 0;
-        }
-
-        .context-menu-item {
-          padding: 6px 12px;
-          font-size: 12px;
-          color: #cccccc;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .context-menu-item:hover {
-          background: #094771;
-        }
-
-        .context-menu-item.danger {
-          color: #ff6b6b;
-        }
-
-        .context-menu-item.danger:hover {
-          background: #5a1d1d;
-        }
-
-        .context-menu-divider {
-          height: 1px;
-          background: #3c3c3c;
-          margin: 4px 0;
-        }
+        /* Minimal custom styles for FileExplorer overrides */
       `}</style>
     </div>
   );

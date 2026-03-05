@@ -19,6 +19,7 @@ fn main() {
             commands::delete_file,
             commands::create_directory,
             commands::get_file_tree,
+            commands::get_git_status,
             commands::get_app_version,
             commands::get_platform,
             commands::get_app_name,

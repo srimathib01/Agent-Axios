@@ -157,8 +157,8 @@ export class FixGeneratorService {
     let match;
     while ((match = regex.exec(content)) !== null) {
       blocks.push({
-        search: match[1].trim(),
-        replace: match[2].trim()
+        search: match[1].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, ''),
+        replace: match[2].replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '')
       });
     }
 

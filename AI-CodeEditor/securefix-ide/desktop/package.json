@@ -6,12 +6,12 @@
   "author": "SecureFix Team",
   "license": "MIT",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "npm run tauri -- dev",
     "dev:frontend": "vite",
-    "build": "tauri build",
+    "build": "npm run tauri -- build",
     "build:frontend": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "env -u LD_LIBRARY_PATH -u GTK_PATH -u GTK_EXE_PREFIX -u GIO_MODULE_DIR -u GTK_IM_MODULE_FILE -u GSETTINGS_SCHEMA_DIR -u LOCPATH tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -19,6 +19,7 @@
     "@tauri-apps/plugin-fs": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
     "@tauri-apps/plugin-window-state": "^2.0.0",
+    "lucide-react": "^0.577.0",
     "monaco-editor": "^0.45.0"
   },
   "devDependencies": {

@@ -30,6 +30,12 @@ pub struct FileTreeNode {
     pub children: Option<Vec<FileTreeNode>>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GitFileStatus {
+    pub path: String,
+    pub status: String,
+}
+
 // Map file extensions to Monaco language IDs
 fn get_language_from_path(file_path: &str) -> String {
     let extension_map: HashMap<&str, &str> = [
@@ -305,6 +311,52 @@ pub async fn get_file_tree(dir_path: String) -> Result<Vec<FileTreeNode>, String
         return Err("Invalid directory path".to_string());
     }
     Ok(build_file_tree_recursive(path, 0, 5))
+}
+
+#[tauri::command]
+pub async fn get_git_status(repo_path: String) -> Result<Vec<GitFileStatus>, String> {
+    let path = Path::new(&repo_path);
+    if !path.exists() || !path.is_dir() {
+        return Err(format!("Repository path not found: {}", repo_path));
+    }
+
+    let output = std::process::Command::new("git")
+        .current_dir(path)
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .map_err(|e| format!("Failed to execute git status: {}", e))?;
+
+    if !output.status.success() {
+        // Not a git repository or other error
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Git error: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut files: Vec<GitFileStatus> = vec![];
+
+    for line in stdout.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+
+        // git status --porcelain formats as "XY path"
+        let status = line[0..2].to_string();
+        
+        // Remove quotes if present (git status might quote filenames with spaces)
+        let mut file_path = line[3..].to_string();
+        if file_path.starts_with('"') && file_path.ends_with('"') {
+            file_path = file_path[1..file_path.len()-1].to_string();
+        }
+
+        files.push(GitFileStatus {
+            path: file_path,
+            status,
+        });
+    }
+
+    Ok(files)
 }
 
 // ============ App Info Commands ============
